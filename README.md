@@ -193,10 +193,8 @@ Ubuntu (EC2 Free Tier compatible)
 This project is inspired by and builds upon the ideas from the original repository:
 
 Original Repo:
-👉 https://github.com/0-Aditya/no-downtime-app
-
-The original project explored script-based automated rollback.
-This version evolves the idea further by eliminating scripts entirely and implementing proxy-level request failover for absolute zero downtime.
+👉 [https://github.com/0-Aditya/no-downtime-app](https://github.com/startbootstrap/startbootstrap-landing-page)
+This is the source repo used for making this project.
 
 🏁 Conclusion
 
