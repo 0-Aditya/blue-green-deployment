@@ -1,69 +1,211 @@
-# [Start Bootstrap - Landing Page](https://startbootstrap.com/theme/landing-page/)
+🚀 Zero-Downtime Blue–Green Deployment with Docker & Nginx
 
-[Landing Page](https://startbootstrap.com/theme/landing-page/) is a multipurpose landing page template for [Bootstrap](https://getbootstrap.com/) created by [Start Bootstrap](https://startbootstrap.com/).
+This project demonstrates a true zero-downtime Blue–Green deployment strategy on a single EC2 instance using Docker and Nginx (open-source) — without relying on polling scripts, sleep-based health checks, or cloud load balancers.
 
-## Preview
+The deployment guarantees that users never experience 5xx errors, even when the active version fails.
 
-[![Landing Page Preview](https://assets.startbootstrap.com/img/screenshots/themes/landing-page.png)](https://startbootstrap.github.io/startbootstrap-landing-page/)
+🎯 Problem Statement
 
-**[View Live Preview](https://startbootstrap.github.io/startbootstrap-landing-page/)**
+In a traditional Docker-based deployment on a single server:
 
-## Status
+Only one version of the app runs at a time
 
-[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/StartBootstrap/startbootstrap-landing-page/master/LICENSE)
-[![npm version](https://img.shields.io/npm/v/startbootstrap-landing-page.svg)](https://www.npmjs.com/package/startbootstrap-landing-page)
+Deployments cause downtime
 
-## Download and Installation
+Rollbacks are slow and reactive
 
-To begin using this template, choose one of the following options to get started:
+Health-check scripts introduce delay and instability
 
-* [Download the latest release on Start Bootstrap](https://startbootstrap.com/theme/landing-page/)
-* Install via npm: `npm i startbootstrap-landing-page`
-* Clone the repo: `git clone https://github.com/StartBootstrap/startbootstrap-landing-page.git`
-* [Fork, Clone, or Download on GitHub](https://github.com/StartBootstrap/startbootstrap-landing-page)
+This project solves those problems by moving failover logic into the reverse proxy layer.
 
-## Usage
+🧠 Key Idea (What Makes This Different)
 
-### Basic Usage
+Zero downtime cannot be reliably achieved with reactive scripts.
+It must be enforced at the proxy level, per request.
 
-After downloading, simply edit the HTML and CSS files included with `dist` directory. These are the only files you need to worry about, you can ignore everything else! To preview the changes you make to the code, you can open the `index.html` file in your web browser.
+Instead of:
 
-### Advanced Usage
+monitoring the app
 
-Clone the source files of the theme and navigate into the theme's root directory. Run `npm install` and then run `npm start` which will open up a preview of the template in your default browser, watch for changes to core template files, and live reload the browser when changes are saved. You can view the `package.json` file to see which scripts are included.
+waiting for failure
 
-#### npm Scripts
+switching traffic later
 
-* `npm run build` builds the project - this builds assets, HTML, JS, and CSS into `dist`
-* `npm run build:assets` copies the files in the `src/assets/` directory into `dist`
-* `npm run build:pug` compiles the Pug located in the `src/pug/` directory into `dist`
-* `npm run build:scripts` brings the `src/js/scripts.js` file into `dist`
-* `npm run build:scss` compiles the SCSS files located in the `src/scss/` directory into `dist`
-* `npm run clean` deletes the `dist` directory to prepare for rebuilding the project
-* `npm run start:debug` runs the project in debug mode
-* `npm start` or `npm run start` runs the project, launches a live preview in your default browser, and watches for changes made to files in `src`
+We let Nginx handle failures instantly at request time.
 
-You must have npm installed in order to use this build environment.
+🏗️ Architecture Overview
 
-## Bugs and Issues
+Blue → Stable (old) version
 
-Have a bug or an issue with this template? [Open a new issue](https://github.com/StartBootstrap/startbootstrap-landing-page/issues) here on GitHub or leave a comment on the [template overview page at Start Bootstrap](https://startbootstrap.com/theme/landing-page/).
+Green → New version (primary)
 
-## About
+Nginx → Reverse proxy + failover controller
 
-Start Bootstrap is an open source library of free Bootstrap templates and themes. All of the free templates and themes on Start Bootstrap are released under the MIT license, which means you can use them for any purpose, even for commercial projects.
+Both Blue and Green containers run simultaneously on the same Docker network.
 
-* <https://startbootstrap.com>
-* <https://twitter.com/SBootstrap>
+Traffic Flow
+Client → Nginx → Green (primary)
+                    ↓
+             (failure detected)
+                    ↓
+           Nginx retries same request → Blue
 
-Start Bootstrap was created by and is maintained by **[David Miller](https://davidmiller.io/)**.
 
-* <https://davidmiller.io>
-* <https://twitter.com/davidmillerhere>
-* <https://github.com/davidtmiller>
+✔ Same request
+✔ No delay
+✔ No error shown to user
 
-Start Bootstrap is based on the [Bootstrap](https://getbootstrap.com/) framework created by [Mark Otto](https://twitter.com/mdo) and [Jacob Thorton](https://twitter.com/fat).
+⚙️ How Zero Downtime Is Achieved
 
-## Copyright and License
+This setup uses request-level failover, not traffic switching.
 
-Copyright 2013-2023 Start Bootstrap LLC. Code released under the [MIT](https://github.com/StartBootstrap/startbootstrap-landing-page/blob/master/LICENSE) license.
+Key Nginx mechanisms used:
+
+backup upstream
+
+Fast upstream timeouts
+
+Immediate retry on failure
+
+No polling or health-check loops
+
+No container restarts during failover
+
+📄 Final Nginx Configuration
+events {}
+
+http {
+
+  upstream app_backend {
+    server green:80 max_fails=1 fail_timeout=0;
+    server blue:80 backup;
+  }
+
+  server {
+    listen 80;
+
+    location / {
+      proxy_pass http://app_backend;
+
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+
+      proxy_connect_timeout 1s;
+      proxy_send_timeout   1s;
+      proxy_read_timeout   1s;
+
+      proxy_next_upstream_timeout 0;
+      proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 2;
+    }
+  }
+}
+
+🔁 Deployment & Rollback Behavior
+Normal Operation
+
+Green serves all traffic
+
+Blue stays idle as rollback target
+
+Failure Scenario
+
+First failed request on Green
+
+Nginx retries the same request on Blue
+
+User receives a valid response
+
+Green is permanently avoided until manual redeploy
+
+Recovery
+
+Fix Green
+
+Restart Green container
+
+Reload Nginx
+
+Green becomes primary again
+
+No scripts. No delay. No downtime.
+
+🧪 How to Test Zero Downtime
+docker stop green
+
+
+Expected result:
+
+Website continues loading
+
+No 502 / 504 errors
+
+Page switches to Blue instantly
+
+❌ Why Health-Check Scripts Were Removed
+
+Earlier approaches used scripts like:
+
+curl checks
+
+sleep-based polling
+
+config rewrites on failure
+
+These are reactive and always allow a failure window.
+
+This project removes them entirely because:
+
+Scripts react after users are affected
+
+Nginx can retry requests before responding
+
+Proxy-level failover is deterministic and instant
+
+🧩 Scope & Limitations
+
+This guarantees zero downtime for:
+
+Container crashes
+
+Network timeouts
+
+Backend 5xx errors
+
+It does not protect against:
+
+Logical bugs that still return 200 OK
+
+(No system can.)
+
+📦 Tech Stack
+
+Docker
+
+Docker Compose
+
+Nginx (open source)
+
+Ubuntu (EC2 Free Tier compatible)
+
+🙏 Credits & Acknowledgements
+
+This project is inspired by and builds upon the ideas from the original repository:
+
+Original Repo:
+👉 https://github.com/0-Aditya/no-downtime-app
+
+The original project explored script-based automated rollback.
+This version evolves the idea further by eliminating scripts entirely and implementing proxy-level request failover for absolute zero downtime.
+
+🏁 Conclusion
+
+This project demonstrates how real-world zero-downtime deployments are achieved:
+
+Not with sleep loops
+
+Not with reactive scripts
+
+But with fail-fast proxies and request retries
+
+This approach mirrors how production systems using ALB, HAProxy, and Envoy work internally.
