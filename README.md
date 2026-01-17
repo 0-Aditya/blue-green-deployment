@@ -193,7 +193,7 @@ Ubuntu (EC2 Free Tier compatible)
 This project is inspired by and builds upon the ideas from the original repository:
 
 Original Repo:
-👉 [https://github.com/0-Aditya/no-downtime-app](https://github.com/startbootstrap/startbootstrap-landing-page)
+👉 https://github.com/startbootstrap/startbootstrap-landing-page
 This is the source repo used for making this project.
 
 🏁 Conclusion
